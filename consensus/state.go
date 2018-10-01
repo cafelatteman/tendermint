@@ -1013,6 +1013,8 @@ func (cs *ConsensusState) enterPrevote(height int64, round int) {
 
 func (cs *ConsensusState) defaultDoPrevote(height int64, round int) {
 	logger := cs.Logger.With("height", height, "round", round)
+
+	//TODO: Remove this so it is aligned with spec!
 	// If a block is locked, prevote that.
 	if cs.LockedBlock != nil {
 		logger.Info("enterPrevote: Block was locked")
@@ -1621,14 +1623,18 @@ func (cs *ConsensusState) addVote(vote *types.Vote, peerID p2p.ID) (added bool, 
 			}
 		}
 
-		// If +2/3 prevotes for *anything* for this or future round:
-		if cs.Round <= vote.Round && prevotes.HasTwoThirdsAny() {
+		// If +2/3 prevotes for *anything* for future round:
+		if cs.Round < vote.Round && prevotes.HasTwoThirdsAny() {
 			// Round-skip over to PrevoteWait or goto Precommit.
 			cs.enterNewRound(height, vote.Round) // if the vote is ahead of us
-			if prevotes.HasTwoThirdsMajority() {
+		}
+
+		// If +2/3 prevotes for *anything* for this round:
+		if cs.Round == vote.Round && prevotes.HasTwoThirdsAny() {
+			if prevotes.HasTwoThirdsMajority() &&
+				(cstypes.RoundStepPrevote == cs.Step || cstypes.RoundStepPrevoteWait == cs.Step) {
 				cs.enterPrecommit(height, vote.Round)
-			} else {
-				cs.enterPrevote(height, vote.Round) // if the vote is ahead of us
+			} else if cstypes.RoundStepPrevote == cs.Step {
 				cs.enterPrevoteWait(height, vote.Round)
 			}
 		} else if cs.Proposal != nil && 0 <= cs.Proposal.POLRound && cs.Proposal.POLRound == vote.Round {
@@ -1641,24 +1647,29 @@ func (cs *ConsensusState) addVote(vote *types.Vote, peerID p2p.ID) (added bool, 
 	case types.VoteTypePrecommit:
 		precommits := cs.Votes.Precommits(vote.Round)
 		cs.Logger.Info("Added to precommit", "vote", vote, "precommits", precommits.StringShort())
-		blockID, ok := precommits.TwoThirdsMajority()
-		if ok && len(blockID.Hash) != 0 {
+
+		if cs.Round <= vote.Round && precommits.HasTwoThirdsAny() {
 			// Executed as TwoThirdsMajority could be from a higher round
 			cs.enterNewRound(height, vote.Round)
-			cs.enterPrecommit(height, vote.Round)
-			cs.enterCommit(height, vote.Round)
-
-			if cs.config.SkipTimeoutCommit && precommits.HasAll() {
-				// if we have all the votes now,
-				// go straight to new round (skip timeout commit)
-				// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, cstypes.RoundStepNewHeight)
-				cs.enterNewRound(cs.Height, 0)
+			if cstypes.RoundStepPrecommitWait > cs.Step {
+				cs.enterPrecommitWait(height, vote.Round)
 			}
-		} else if cs.Round <= vote.Round && precommits.HasTwoThirdsAny() {
-			cs.enterNewRound(height, vote.Round)
-			cs.enterPrecommit(height, vote.Round)
-			cs.enterPrecommitWait(height, vote.Round)
 		}
+
+		blockID, ok := precommits.TwoThirdsMajority()
+		if ok {
+			cs.enterPrecommit(height, vote.Round)
+			if len(blockID.Hash) != 0 {
+				cs.enterCommit(height, vote.Round)
+				if cs.config.SkipTimeoutCommit && precommits.HasAll() {
+					// if we have all the votes now,
+					// go straight to new round (skip timeout commit)
+					// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, cstypes.RoundStepNewHeight)
+					cs.enterNewRound(cs.Height, 0)
+				}
+			}
+		}
+
 	default:
 		panic(fmt.Sprintf("Unexpected vote type %X", vote.Type)) // go-wire should prevent this.
 	}
