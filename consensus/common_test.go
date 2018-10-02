@@ -309,9 +309,8 @@ func randConsensusState(nValidators int) (*ConsensusState, []*validatorStub) {
 
 func ensureNoNewEvent(t *testing.T, ch <-chan interface{}, timeout time.Duration,
 	errorMessage string) {
-	timer := time.NewTimer(timeout)
 	select {
-	case <-timer.C:
+	case <-time.After(timeout):
 		break
 	case <-ch:
 		t.Error(errorMessage)
@@ -323,16 +322,15 @@ func ensureNoNewStep(t *testing.T, stepCh <-chan interface{}) {
 		"not moving to the next step")
 }
 
-func ensureNoNewTimeout(t *testing.T, stepCh <-chan interface{}, timeout int) {
-	timeoutDuration := time.Duration(timeout*5) * time.Millisecond
+func ensureNoNewTimeout(t *testing.T, stepCh <-chan interface{}, timeout int64) {
+	timeoutDuration := time.Duration(timeout*5) * time.Nanosecond
 	ensureNoNewEvent(t, stepCh, timeoutDuration, "We should be stuck waiting, "+
 		"not moving to the next step")
 }
 
 func ensureNewEvent(t *testing.T, ch <-chan interface{}, timeout time.Duration, errorMessage string) {
-	timer := time.NewTimer(timeout)
 	select {
-	case <-timer.C:
+	case <-time.After(timeout):
 		t.Error(errorMessage)
 	case <-ch:
 		break
@@ -349,8 +347,8 @@ func ensureNewRound(t *testing.T, roundCh <-chan interface{}) {
 		"Timeout expired while waiting for NewRound event")
 }
 
-func ensureNewTimeout(t *testing.T, timeoutCh <-chan interface{}, timeout int) {
-	timeoutDuration := time.Duration(timeout*5) * time.Millisecond
+func ensureNewTimeout(t *testing.T, timeoutCh <-chan interface{}, timeout int64) {
+	timeoutDuration := time.Duration(timeout*5) * time.Nanosecond
 	ensureNewEvent(t, timeoutCh, timeoutDuration,
 		"Timeout expired while waiting for NewTimeout event")
 }
@@ -377,14 +375,14 @@ func ensureNewUnlock(t *testing.T, unlockCh <-chan interface{}) {
 
 func ensureVote(t *testing.T, voteCh chan interface{}, height int64, round int,
 	voteType byte) {
-	timer := time.NewTimer(ensureTimeout)
 	select {
-	case <-timer.C:
+	case <-time.After(ensureTimeout):
 		break
 	case v := <-voteCh:
 		edv, ok := v.(types.EventDataVote)
 		if !ok {
-			t.Error(fmt.Sprintf("expected a *types.Vote, got %v. wrong subscription channel?",
+			t.Errorf(fmt.Sprintf("expected a *types.Vote, "+
+				"got %v. wrong subscription channel?",
 				reflect.TypeOf(v)))
 		}
 		vote := edv.Vote
