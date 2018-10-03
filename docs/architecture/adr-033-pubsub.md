@@ -1,4 +1,4 @@
-# ADR 024: Pubsub
+# ADR 033: pubsub 2.0
 
 Author: Anton Kaliaev (@melekes)
 
