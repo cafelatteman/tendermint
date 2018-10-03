@@ -40,3 +40,4 @@ BUG FIXES:
 - [autofile] \#2428 Group.RotateFile need call Flush() before rename (@goolAdapter)
 - [node] \#2434 Make node respond to signal interrupts while sleeping for genesis time
 - [evidence] \#2515 fix db iter leak (@goolAdapter)
+- [common] \#2534 make bit array's PickRandom choose uniformly from true bits
